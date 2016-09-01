@@ -101,7 +101,7 @@ class ClockEngine:
     """
     EventType = 'clock_tick'
 
-    def __init__(self, event_engine, now=None, tzinfo=None):
+    def __init__(self, event_engine, tzinfo=None):
         """
         :param event_engine:
         :param event_engine: tzinfo
@@ -109,19 +109,16 @@ class ClockEngine:
         """
         # 默认使用当地时间的时区
         self.tzinfo = tzinfo or tz.tzlocal()
-        # 引擎启动的时间,默认为当前.测试时可手动设置模拟各个时间段.
-        self.time_delta = self._delta(now)
-        # self.start_time = self.now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
         self.event_engine = event_engine
         self.is_active = True
-        self.clock_engine_thread = Thread(target=self.clocktick)
+        self.clock_engine_thread = Thread(target=self.clocktick, name="ClockEngine.clocktick")
         self.sleep_time = 1
         self.trading_state = True if (etime.is_tradetime(datetime.datetime.now()) and etime.is_trade_date(datetime.datetime.now())) else False
         self.clock_moment_handlers = deque()
         self.clock_interval_handlers = set()
 
-        if self.trading_state:
-            self._init_clock_handler()
+        self._init_clock_handler()
 
     def _init_clock_handler(self):
         """
@@ -151,23 +148,13 @@ class ClockEngine:
         for interval in (0.5, 1, 5, 15, 30, 60):
             self.register_interval(interval)
 
-    def _delta(self, now):
-        if now is None:
-            return 0
-        if now.tzinfo is None:
-            now = arrow.get(datetime.datetime(
-                    now.year, now.month, now.day, now.hour, now.minute, now.second, now.microsecond, self.tzinfo,
-            ))
-
-        return (arrow.now() - now).total_seconds()
-
     @property
     def now(self):
         """
         now 时间戳统一接口
         :return:
         """
-        return time.time() - self.time_delta
+        return time.time()
 
     @property
     def now_dt(self):
@@ -175,14 +162,6 @@ class ClockEngine:
         :return: datetime 类型, 带时区的时间戳.建议使用 arrow 库
         """
         return arrow.get(self.now).to(self.tzinfo)
-
-    def reset_now(self, now=None):
-        """
-        调试用接口,请勿在生产环境使用
-        :param now:
-        :return:
-        """
-        self.time_delta = self._delta(now)
 
     def start(self):
         self.clock_engine_thread.start()

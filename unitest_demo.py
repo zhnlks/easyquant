@@ -4,9 +4,11 @@
 """
 import time
 import unittest
+from unittest import mock
 import datetime
 import pandas as pd
 from easyquant.easydealutils.time import get_next_trade_date, is_trade_date
+import arrow
 
 from dateutil import tz
 from easyquant.main_engine import MainEngine
@@ -15,7 +17,8 @@ from easyquant.event_engine import EventEngine
 
 __author__ = 'Shawn'
 
-main_engine = MainEngine('ht')
+# 需要制定一个有效的证券账户信息
+main_engine = MainEngine('ht', "tmp/ht.json")
 
 
 class BaseTest(unittest.TestCase):
@@ -56,7 +59,7 @@ class TestClock(BaseTest):
 
         now = datetime.datetime.combine(self.trade_date, self.time)
         # 此处重新定义 main_engine
-        self._main_engine = MainEngine('ht', now=now)
+        self._main_engine = MainEngine('ht', 'tmp/ht.json')
 
         # 设置为不在交易中
         self.clock_engine.trading_state = False
@@ -84,42 +87,33 @@ class TestClock(BaseTest):
 
     def test_set_now(self):
         """
-        重设 clock_engine 的时间
-        :return:
-        """
-
-        tzinfo = tz.tzlocal()
-        now = datetime.datetime.combine(
-            self.trade_date,
-            datetime.time(8, 59, 00, tzinfo=tzinfo),
-        )
-        clock_engien = ClockEngine(EventEngine(), now, tzinfo)
-
-        # 去掉微秒误差后比较
-        self.assertEqual(clock_engien.now_dt.replace(microsecond=0), now)
-
-    def test_reset_now(self):
-        """
-        重设时钟引擎当前时间为其他时间点
+        1. 重设 clock_engine 的时间
+        2. 通过 mock 来重设时间戳
+        3. mock 只能重设 time.time 函数的时间戳,但是不能重设 datetime.datetime.now 函数的时间戳,详情见: http://stackoverflow.com/questions/4481954/python-trying-to-mock-datetime-date-today-but-not-working
+        4. 在代码中需要使用时间戳时,请通过 clock_engine 中的 now 或者 now_dt 接口获得,也可以使用 time.time 获得.否则该段代码将不适用于需要更改时间戳的单元测试
         :return:
         """
         tzinfo = tz.tzlocal()
-        clock_engien = ClockEngine(EventEngine())
-        now = datetime.datetime.combine(
-            self.trade_date,
-            datetime.time(8, 59, 00, tzinfo=tzinfo),
-        )
-        clock_engien.reset_now(now)
+        # 使用datetime 类构建时间戳
+        now = datetime.datetime(2016, 7, 14, 8, 59, 50, tzinfo=tzinfo)
 
-        # 去掉微秒误差后比较
-        self.assertEqual(clock_engien.now_dt.replace(microsecond=0), now)
+        # 通过mock ,将 time.time() 函数的返回值重设为上面的打算模拟的值,注意要转化为浮点数时间戳
+        time.time = mock.Mock(return_value=now.timestamp())
 
-        # 重设为当前时间
-        clock_engien.reset_now()
-        now = datetime.datetime.now(tzinfo).replace(microsecond=0)
+        # 生成一个时钟引擎
+        clock_engien = ClockEngine(EventEngine(), tzinfo)
 
-        # 去掉微秒误差后比较
-        self.assertEqual(clock_engien.now_dt.replace(microsecond=0), now)
+        # 去掉微秒误差后验证其数值
+        self.assertEqual(clock_engien.now, now.timestamp())  # time.time 时间戳
+        self.assertEqual(clock_engien.now_dt, now)  # datetime 时间戳
+
+        # 据此可以模拟一段时间内各个闹钟事件的触发,比如模拟开市9:00一直到休市15:00
+        for _ in range(60):
+            clock_engien.tock()
+            now += datetime.timedelta(seconds=1)  # 每秒触发一次 tick_tock
+            time.time = mock.Mock(return_value=now.timestamp())
+            self.assertEqual(clock_engien.now, now.timestamp())  # time.time 时间戳
+            self.assertEqual(clock_engien.now_dt, now)  # datetime 时间戳
 
     def test_clock_moment_is_active(self):
         # 设置时间
@@ -127,7 +121,7 @@ class TestClock(BaseTest):
             self.trade_date,
             datetime.time(23, 59, 58, tzinfo=tz.tzlocal()),
         )
-        self.clock_engine.reset_now(now)
+        time.time = mock.Mock(return_value=now.timestamp())
 
         # 触发前, 注册时间事件
         moment = datetime.time(23, 59, 59, tzinfo=tz.tzlocal())
@@ -140,7 +134,8 @@ class TestClock(BaseTest):
             self.trade_date,
             datetime.time(23, 59, 59, tzinfo=tz.tzlocal())
         )
-        self.clock_engine.reset_now(now)
+        time.time = mock.Mock(return_value=now.timestamp())
+
         # 确认触发
         self.assertTrue(cmh.is_active())
 
@@ -150,7 +145,7 @@ class TestClock(BaseTest):
             self.trade_date,
             datetime.time(23, 59, 58, tzinfo=tz.tzlocal())
         )
-        self.clock_engine.reset_now(now)
+        time.time = mock.Mock(return_value=now.timestamp())
 
         # 触发前, 注册时间事件
         moment = datetime.time(23, 59, 59, tzinfo=tz.tzlocal())
@@ -163,7 +158,8 @@ class TestClock(BaseTest):
             self.trade_date,
             datetime.time(23, 59, 59, tzinfo=tz.tzlocal())
         )
-        self.clock_engine.reset_now(now)
+        time.time = mock.Mock(return_value=now.timestamp())
+
         # 确认触发
         self.assertTrue(cmh.is_active())
 
@@ -185,7 +181,7 @@ class TestClock(BaseTest):
             self.trade_date,
             datetime.time(23, 59, 59, tzinfo=tz.tzlocal())
         )
-        self.clock_engine.reset_now(begin)
+        time.time = mock.Mock(return_value=begin.timestamp())
 
         # 注册时刻一个超时事件
         moment = datetime.time(0, 0, 0, tzinfo=tz.tzlocal())
@@ -255,7 +251,7 @@ class TestClock(BaseTest):
         self.assertFalse(self.clock_engine.trading_state)
 
     def register_clock_interval(self, begin, trading, active_times):
-        self.clock_engine.reset_now(begin)
+        time.time = mock.Mock(return_value=begin.timestamp())
         self.active_times = 0
 
         def clock(event):
@@ -277,7 +273,7 @@ class TestClock(BaseTest):
         # 开启事件引擎
         for sec in range(int(minute_interval * 60)):
             now = begin + datetime.timedelta(seconds=sec)
-            self.clock_engine.reset_now(now)
+            time.time = mock.Mock(return_value=now.timestamp())
             self.clock_engine.tock()
         time.sleep(1)
         self.main_engine.event_engine.stop()
@@ -316,7 +312,7 @@ class TestClock(BaseTest):
         seconds = 60 * mins
         for secs in range(seconds):
             now = begin + datetime.timedelta(seconds=secs)
-            self.clock_engine.reset_now(now)
+            time.time = mock.Mock(return_value=now.timestamp())
             self.clock_engine.tock()
             time.sleep(0.001)
 
@@ -328,7 +324,6 @@ class TestClock(BaseTest):
         self.assertEqual(len(counts[30]), (15 - 9) * 2 + 1 - len(["9:00"]))
         self.assertEqual(len(counts[15]), (15 - 9) * 4 + 1 -
                          len(["9:00"]))
-
 
     def test_tick_moment_event(self):
         """
@@ -357,11 +352,11 @@ class TestClock(BaseTest):
         end = (begin + datetime.timedelta(days=days)).replace(hour=23, minute=59, second=59)
 
         # 重置时间到凌晨
-        self.clock_engine.reset_now(begin)
+        time.time = mock.Mock(return_value=begin.timestamp())
 
         # 预估时间事件触发次数, 每个交易日触发一次
         actived_times = 0
-        for date in pd.date_range(begin.date(), periods=days+1):
+        for date in pd.date_range(begin.date(), periods=days + 1):
             if is_trade_date(date):
                 actived_times += 1
 
@@ -373,7 +368,7 @@ class TestClock(BaseTest):
 
         now = begin
         while 1:
-            self.clock_engine.reset_now(now)
+            time.time = mock.Mock(return_value=now.timestamp())
             self.clock_engine.tock()
             time.sleep(0.001)
             now += interval
@@ -388,4 +383,3 @@ class TestClock(BaseTest):
         self.assertEqual(len(counts['pause']), actived_times)
         self.assertEqual(len(counts['continue']), actived_times)
         self.assertEqual(len(counts['close']), actived_times)
-

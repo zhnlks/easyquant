@@ -1,3 +1,4 @@
+import time
 import datetime as dt
 from dateutil import tz
 from easyquant import DefaultLogHandler
@@ -8,7 +9,10 @@ class Strategy(StrategyTemplate):
     name = '测试策略1'
 
     def init(self):
-        now = self.clock_engine.now_dt
+        # 通过下面的方式来获取时间戳
+        now_dt = self.clock_engine.now_dt
+        now = self.clock_engine.now
+        now = time.time()
 
         # 注册时钟事件
         clock_type = "盘尾"
@@ -81,4 +85,11 @@ class Strategy(StrategyTemplate):
 
     def log_handler(self):
         """自定义 log 记录方式"""
-        return DefaultLogHandler(self.name, log_type='file', filepath='demo1.log')
+        return DefaultLogHandler(self.name, log_type='stdout', filepath='demo1.log')
+
+    def shutdown(self):
+        """
+        关闭进程前的调用
+        :return:
+        """
+        self.log.info("假装在关闭前保存了策略数据")
