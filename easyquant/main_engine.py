@@ -22,6 +22,7 @@ if (PY_MAJOR_VERSION, PY_MINOR_VERSION) < (3, 5):
 
 ACCOUNT_OBJECT_FILE = 'account.session'
 
+
 class MainEngine:
     """主引擎，负责行情 / 事件驱动引擎 / 交易"""
 

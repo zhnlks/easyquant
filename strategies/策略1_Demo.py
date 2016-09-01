@@ -54,6 +54,8 @@ class Strategy(StrategyTemplate):
          'volume': '206390073.351'}}
         """
         # 使用 self.user 来操作账户，用法同 easytrader 用法
+        self.user.buy('')
+        self.user.sell('')
         # 使用 self.log.info('message') 来打印你所需要的 log
         print('demo1 的 log 使用自定义 log 的方式记录在 demo1.log')
         self.log.info('\n\n策略1触发')
